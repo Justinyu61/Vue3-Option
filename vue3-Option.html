@@ -61,56 +61,171 @@
             </div>
         </div>
         <script>
-            const App = {
+            const app = Vue.createApp({
                 data() {
                     return {
-                        //api資料
-                        datastore: [],
-                        //輸入的瀏覽紀錄
-                        cacheArea: '',
-                        //輸入關鍵搜查
-                        cacheSearch: '',
-                        //搜查紀錄
-                        browseLog: [],
-                    };
+                        allData: [],//遠端資料存放區
+                        nowPage: 0,//當前頁數，對應現在當前頁數
+                        // 設定要顯示在畫面上的資料數量
+                        // 預設每一頁只顯示 20 筆資料。
+                        perPage: 20,
+                        pageTotal: '',
+                        // 建立新陣列存放各頁資料
+                        cardInfo: []
+                    }
                 },
-                created(){//頁面建立時讀取api寫入datastore
-                    const apiUrl = 'https://raw.githubusercontent.com/hexschool/KCGTravel/master/datastore_search.json';
-                    axios.get(apiUrl)
-                        .then((res) => {
-                            // 取得遠端資料
-                            // console.log(res.data.result.records)
-                            this.datastore = res.data.result.records
-                            // console.log(this.datastore)
-                        })
-                        .catch((err) => {
-                            console.log(err)
-                        })
+                created() {
+                    this.getData()
                 },
-                computed: {
-                    dataFilter(){//取得datastore然後分解,取得Name 比對cacheSearch輸入的內容作Search
-                        return this.datastore.filter((item) => {
-                            return item.Name.match(this.cacheSearch)
-                        })
+                methods: {
+                    getData() {
+                        const jsonUrl = 'https://api.kcg.gov.tw/api/service/Get/9c8e1450-e833-499c-8320-29b36b7ace5c'
+                        axios.get(jsonUrl)
+                            .then((res) => {
+                                this.allData = res.data.data.XML_Head.Infos.Info
+                                // console.log(this.allData)
+                                this.pagination(1)
+                            })
+                            .catch((err) => {
+                                console.log(err)
+                            })
                     },
-                },
-                watch: {
-                    //監聽@click="cacheArea = item" 帶入
-                    cacheArea(){
-                        if (this.browseLog.length < 10){
-                            this.browseLog.push( this.cacheArea )
-                            // console.log( this.cacheArea )
-                            // console.log(this.browseLog)
+                    pagination(page) {
+                        this.nowPage = page
+                        // console.log(this.nowPage)//設定第一頁
+
+                        // 取得全部資料長度
+                        const dataLen = this.allData.length
+                        // console.log(dataLen)//334筆
+
+                        // page 按鈕總數量公式 總資料數量 / 每一頁要顯示的資料
+                        // 這邊要注意，因為有可能會出現餘數，所以要無條件進位。
+                        this.pageTotal = Math.ceil(dataLen / this.perPage);
+                        // console.log(this.pageTotal)//16.7 -> 17頁
+
+                        // 當前頁數，對應現在當前頁數
+                        let currentPage = this.nowPage;
+                        // console.log(currentPage)//第一頁
+
+                        // 因為要避免當前頁數筆總頁數還要多，假設今天總頁數是 3 筆，就不可能是 4 或 5
+                        // 所以要在寫入一個判斷避免這種狀況。
+                        // 當"當前頁數"比"總頁數"大的時候，"當前頁數"就等於"總頁數"
+                        // 注意這一行在最前面並不是透過 nowPage 傳入賦予與 currentPage，所以才會寫這一個判斷式，但主要是預防一些無法預期的狀況，例如：nowPage 突然發神經？！
+                        if (currentPage > this.pageTotal) {
+                            currentPage = this.pageTotal
+                        }
+                        // 最大與最小值
+                        const minData = (currentPage * this.perPage) - this.perPage + 1
+                        const maxData = currentPage * this.perPage + 1
+
+                        // slice()回傳新陣列 為原陣列選擇之minData到maxData部分得淺拷貝
+                        //方法的第一個參數 begin 是要從哪個索引值開始切
+                        //方法的第二個參數 end 是要在哪一個索引值結束
+                        //但是第二個參數常會讓人會錯意，例如：
+                        //第二個參數如果是三，slice() 方法其實只會取到索引值為二
+                        //所以maxData要+1才會準確
+                        this.cardInfo = this.allData.slice(minData, maxData)
+                        // console.log(maxData)
+                    },
+                    previousBtn(){
+                        if (this.nowPage === 1){
+                            return this.nowPage
                         } else {
-                            //shift()方法可移除數組第一項將長度固定在長度10
-                            this.browseLog.shift()
-                            this.browseLog.push( this.cacheArea )
+                            this.nowPage = this.nowPage - 1
+                            this.pagination(this.nowPage)
+                        }
+                    },
+                    forNowBtn(item){
+                        this.nowPage = item
+                        this.pagination(this.nowPage)
+                    },
+                    nextBtn(){
+                        if (this.nowPage === this.nowPage -1 ){
+                            return this.nowPage
+                        } else {
+                            this.nowPage = this.nowPage + 1
+                            this.pagination(this.nowPage)
                         }
                     }
                 }
-            };
+            })
+            app.component('cardContent', {
+                props: ['cardInfo'],
+                template: `
+                              <div class="row" id="content">
+                              <div class="col-md-6 py-2" v-for="item in cardInfo" :key="item.id">
+                                <div class="card">
+                                  <div class="card bg-dark text-white text-left">
+                                    <img class="card-img-top img-cover" height="155" :src="item.Picture1">
+                                    <div
+                                        class="card-img-overlay d-flex justify-content-between align-items-end p-0 px-3"
+                                        style="background-color: rgba(0, 0, 0, .2)">
+                                      <h5 class="card-img-title-lg">{{ item.Name }}</h5><h5 class="card-img-title-sm">
+                                      {{ item.Zone }}
+                                    </h5>
+                                    </div>
+                                  </div>
+                                  <div class="card-body text-left">
+                                    <p class="card-text"><i
+                                        class="far fa-clock fa-clock-time"></i>&nbsp;{{ item.Opentime }}</p>
+                                    <p class="card-text"><i
+                                        class="fas fa-map-marker-alt fa-map-gps"></i>&nbsp;{{ item.Add }}</p>
+                                    <p class="card-text"><i class="fas fa-mobile-alt fa-mobile"></i>&nbsp;{{ item.Tel }}
+                                    </p>
+                                    <div v-if="item.Ticketinfo">
+                                      <p class="card-text">
+                                        <i class="fas fa-tags text-warning"/>
+                                        &nbsp;{{ item.Ticketinfo }}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              </div>`
+            })
 
-            Vue.createApp(App).mount('#app');
+            app.component('pageBtn', {
+                //父元件傳子元件
+                props: ['pageTotal', 'nowPage'],
+                methods: {
+                    //寫入下方template
+                    previousHandleClick(){
+                        //自定義事件
+                        this.$emit('previousPage')
+                    },
+                    forNowHandleClick(item) {
+                        this.$emit('forNowPage', item)
+                    },
+                    nextHandleClick() {
+                        this.$emit('nextPage')
+                    }
+                },
+                template: `
+                              <div class="d-flex justify-content-center mt-4">
+                              <nav aria-label="Page navigation example">
+                                <ul class="pagination">
+                                  <li class="page-item" @click="previousHandleClick" :class='{"disabled": this.nowPage <= 1 }'>
+                                    <a class="page-link" href="#" >
+                                      Previous
+                                    </a>
+                                  </li>
+                                  <li class="page-item" v-for="item in pageTotal" :key="item" :class='{"active": this.nowPage === item }' @click="forNowHandleClick(item)" >
+                                    <a class="page-link" href="#">
+                                      {{ item }}
+                                    </a>
+                                  </li>
+                                  <li class="page-item" @click="nextHandleClick" :class='{"disabled": this.nowPage === pageTotal }'>
+                                    <a class="page-link" href="#" >
+                                      Next
+                                    </a>
+                                  </li>
+                                </ul>
+                              </nav>
+                              </div>
+                            `
+
+            })
+            app.mount('#app')
         </script>
         <style>
             #app {
